@@ -1,7 +1,12 @@
 package com.tianji.learning.service;
 
+import com.tianji.common.domain.dto.PageDTO;
+import com.tianji.common.domain.query.PageQuery;
 import com.tianji.learning.domain.po.LearningLesson;
 import com.baomidou.mybatisplus.extension.service.IService;
+import com.tianji.learning.domain.vo.LearningLessonVO;
+
+import java.util.List;
 
 /**
  * <p>
@@ -13,4 +18,17 @@ import com.baomidou.mybatisplus.extension.service.IService;
  */
 public interface ILearningLessonService extends IService<LearningLesson> {
 
+    void addUserLessons(Long userId, List<Long> courseIds);
+
+    void removeUserLessons(Long userId, List<Long> courseIds);
+
+    PageDTO<LearningLessonVO> queryMyLessons(PageQuery query);
+
+    void deleteLesson(Long courseId);
+
+    Long isLessonValid(Long courseId);
+
+    LearningLessonVO queryLessonByCourseId(Long courseId);
+
+    Integer countLearningLessonByCourse(Long courseId);
 }
