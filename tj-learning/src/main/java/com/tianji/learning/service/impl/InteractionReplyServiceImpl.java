@@ -51,10 +51,14 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
         // 2.数据转换
         InteractionReply reply = BeanUtils.toBean(replyDTO, InteractionReply.class);
         reply.setUserId(userId);
+        // 回答没有上级回答，数据库中统一用0表示（表结构answer_id默认值为0），避免查询时漏掉
+        if (reply.getAnswerId() == null) {
+            reply.setAnswerId(0L);
+        }
         // 3.保存回答或评论
         save(reply);
-        // 4.判断是回答还是评论，更新关联数据
-        if (replyDTO.getAnswerId() == null) {
+        // 4.判断是回答还是评论，更新关联数据（answerId为null或0都表示回答）
+        if (replyDTO.getAnswerId() == null || replyDTO.getAnswerId() == 0L) {
             // 4.1.是回答：记录问题的最新回答id，并累加回答数量
             questionService.lambdaUpdate()
                     .set(InteractionQuestion::getLatestAnswerId, reply.getId())
@@ -88,10 +92,12 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
         // 2.分页查询
         // 2.1.查询回答时，需要排除评论（评论的answer_id不为空）
         // 2.2.用户端不展示被隐藏的回答或评论
+        // 回答的answer_id为0（表结构默认值），评论的answer_id为上级回答id
         Page<InteractionReply> page = lambdaQuery()
                 .eq(questionId != null, InteractionReply::getQuestionId, questionId)
                 .eq(answerId != null, InteractionReply::getAnswerId, answerId)
-                .isNull(answerId == null, InteractionReply::getAnswerId)
+                .and(answerId == null, w -> w.eq(InteractionReply::getAnswerId, 0L)
+                        .or().isNull(InteractionReply::getAnswerId))
                 .eq(!isAdmin, InteractionReply::getHidden, false)
                 .page(isAdmin
                         ? query.toMpPageDefaultSortByCreateTimeDesc()
@@ -105,7 +111,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
         Set<Long> userIds = new HashSet<>();
         Set<Long> answerIds = new HashSet<>();
         for (InteractionReply r : records) {
-            if (r.getAnswerId() == null) {
+            if (isAnswer(r)) {
                 // 当前记录是回答，需要统计其下的评论数量
                 answerIds.add(r.getId());
             }
@@ -190,12 +196,19 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
                 .eq(InteractionReply::getId, id)
                 .update();
         // 3.隐藏的是回答时，其下的评论也要同步隐藏或显示
-        if (reply.getAnswerId() == null) {
+        if (isAnswer(reply)) {
             lambdaUpdate()
                     .set(InteractionReply::getHidden, hidden)
                     .eq(InteractionReply::getAnswerId, id)
                     .update();
         }
+    }
+
+    /**
+     * 判断记录是否是回答：answer_id为0或null都表示回答
+     */
+    private boolean isAnswer(InteractionReply reply) {
+        return reply.getAnswerId() == null || reply.getAnswerId() == 0L;
     }
 
     /**
