@@ -5,6 +5,8 @@ import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.tianji.api.client.remark.RemarkClient;
 import com.tianji.api.client.user.UserClient;
 import com.tianji.api.dto.user.UserDTO;
+import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
+import com.tianji.common.constants.MqConstants;
 import com.tianji.common.domain.dto.PageDTO;
 import com.tianji.common.exceptions.BadRequestException;
 import com.tianji.common.utils.BeanUtils;
@@ -42,6 +44,7 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
     private final IInteractionQuestionService questionService;
     private final UserClient userClient;
     private final RemarkClient remarkClient;
+    private final RabbitMqHelper mqHelper;
 
     @Override
     @Transactional
@@ -65,12 +68,22 @@ public class InteractionReplyServiceImpl extends ServiceImpl<InteractionReplyMap
                     .setSql("answer_times = answer_times + 1")
                     .eq(InteractionQuestion::getId, replyDTO.getQuestionId())
                     .update();
+            // 4.1.1.发送MQ消息，异步累加回答问题的积分
+            mqHelper.send(
+                    MqConstants.Exchange.LEARNING_EXCHANGE,
+                    MqConstants.Key.WRITE_REPLY,
+                    userId);
         } else {
             // 4.2.是评论：累加所属回答的评论数量
             lambdaUpdate()
                     .setSql("reply_times = reply_times + 1")
                     .eq(InteractionReply::getId, replyDTO.getAnswerId())
                     .update();
+            // 4.2.1.发送MQ消息，异步累加评论积分
+            mqHelper.send(
+                    MqConstants.Exchange.LEARNING_EXCHANGE,
+                    MqConstants.Key.WRITE_COMMENT,
+                    userId);
         }
         // 5.学生提交的内容需要管理员重新查看，把问题标记为未查看
         if (Boolean.TRUE.equals(replyDTO.getIsStudent())) {

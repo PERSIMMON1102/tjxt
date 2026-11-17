@@ -6,6 +6,11 @@ spring:
         namespace: f923fb34-cb0a-4c06-8fca-ad61ea61a3f0
         group: DEFAULT_GROUP
         ip: 192.168.150.1
+tj:
+  xxl-job:
+    executor:
+      # 本机存在多块网卡，显式指定 VMware 宿主机地址，保证调度中心（Docker容器）可以回调
+      ip: 192.168.150.1
 logging:
   level:
     com.tianji: debug
