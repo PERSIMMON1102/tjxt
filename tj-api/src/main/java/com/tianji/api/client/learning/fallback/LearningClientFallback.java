@@ -2,6 +2,7 @@ package com.tianji.api.client.learning.fallback;
 
 import com.tianji.api.client.learning.LearningClient;
 import com.tianji.api.dto.leanring.LearningLessonDTO;
+import com.tianji.api.dto.leanring.LearningRecordFormDTO;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.cloud.openfeign.FallbackFactory;
 
@@ -25,6 +26,11 @@ public class LearningClientFallback implements FallbackFactory<LearningClient> {
             @Override
             public LearningLessonDTO queryLearningRecordByCourse(Long courseId) {
                 return null;
+            }
+
+            @Override
+            public void saveLearningRecord(LearningRecordFormDTO recordDTO) {
+                log.error("保存学习记录失败，学习服务不可用");
             }
         };
     }

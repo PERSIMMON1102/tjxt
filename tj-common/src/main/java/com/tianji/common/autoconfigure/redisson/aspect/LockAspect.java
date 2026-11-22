@@ -91,9 +91,12 @@ public class LockAspect {
         while (matcher.find()) {
             // 2.1.获取表达式
             String tmp = matcher.group();
-            // 2.2.尝试解析
-            Expression expression = parser.parseExpression("#" + matcher.group(1));
+            String group = matcher.group(1);
+            // 2.2.这里要判断表达式是否以 T 字符开头，这种属于解析静态方法，不走上下文
+            Expression expression = parser.parseExpression(group.charAt(0) == 'T' ? group : "#" + group);
+            // 2.3.解析出表达式对应的值
             Object value = expression.getValue(context);
+            // 2.4.用值替换锁名称中的SPEL表达式
             name = name.replace(tmp, ObjectUtils.nullSafeToString(value));
         }
         return name;

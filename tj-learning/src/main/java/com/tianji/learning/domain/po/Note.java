@@ -1,6 +1,7 @@
 package com.tianji.learning.domain.po;
 
 import com.baomidou.mybatisplus.annotation.IdType;
+import com.baomidou.mybatisplus.annotation.TableField;
 import com.baomidou.mybatisplus.annotation.TableId;
 import com.baomidou.mybatisplus.annotation.TableName;
 import lombok.Data;
@@ -100,4 +101,10 @@ public class Note implements Serializable {
      * 更新时间
      */
     private LocalDateTime updateTime;
+
+    /**
+     * 被采集次数，非数据库字段，管理端分页查询时由SQL统计
+     */
+    @TableField(exist = false)
+    private Integer usedTimes;
 }

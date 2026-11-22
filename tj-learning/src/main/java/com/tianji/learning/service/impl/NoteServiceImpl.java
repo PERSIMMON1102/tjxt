@@ -250,6 +250,7 @@ public class NoteServiceImpl extends ServiceImpl<NoteMapper, Note> implements IN
             v.setCourseName(courseMap.get(r.getCourseId()));
             v.setChapterName(csNameMap.get(r.getChapterId()));
             v.setSectionName(csNameMap.get(r.getSectionId()));
+            v.setUsedTimes(r.getUsedTimes());
             list.add(v);
         }
         return new PageDTO<>(page.getTotal(), page.getPages(), list);

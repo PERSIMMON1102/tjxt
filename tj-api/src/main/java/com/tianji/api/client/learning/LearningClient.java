@@ -2,9 +2,12 @@ package com.tianji.api.client.learning;
 
 import com.tianji.api.client.learning.fallback.LearningClientFallback;
 import com.tianji.api.dto.leanring.LearningLessonDTO;
+import com.tianji.api.dto.leanring.LearningRecordFormDTO;
 import org.springframework.cloud.openfeign.FeignClient;
 import org.springframework.web.bind.annotation.GetMapping;
 import org.springframework.web.bind.annotation.PathVariable;
+import org.springframework.web.bind.annotation.PostMapping;
+import org.springframework.web.bind.annotation.RequestBody;
 
 @FeignClient(value = "learning-service", fallbackFactory = LearningClientFallback.class)
 public interface LearningClient {
@@ -32,5 +35,12 @@ public interface LearningClient {
      */
     @GetMapping("/learning-records/course/{courseId}")
     LearningLessonDTO queryLearningRecordByCourse(@PathVariable("courseId") Long courseId);
+
+    /**
+     * 新增学习记录，考试交卷后由考试服务调用
+     * @param recordDTO 学习记录信息
+     */
+    @PostMapping("/learning-records")
+    void saveLearningRecord(@RequestBody LearningRecordFormDTO recordDTO);
 
 }

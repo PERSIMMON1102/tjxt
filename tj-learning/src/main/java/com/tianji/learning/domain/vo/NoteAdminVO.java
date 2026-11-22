@@ -28,6 +28,9 @@ public class NoteAdminVO {
     @ApiModelProperty("是否被隐藏")
     private Boolean hidden;
 
+    @ApiModelProperty("被采集次数")
+    private Integer usedTimes;
+
     @ApiModelProperty("作者名称")
     private String authorName;
 

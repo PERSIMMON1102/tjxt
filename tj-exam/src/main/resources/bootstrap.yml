@@ -22,6 +22,7 @@ spring:
           - dataId: shared-mq.yaml # 共享mq配置
           - dataId: shared-xxljob.yaml # 共享mq配置
           - dataId: shared-seata.yaml # 共享seata配置
+          - dataId: shared-mongo.yaml # 共享mongodb配置
 tj:
   swagger:
     enable: true

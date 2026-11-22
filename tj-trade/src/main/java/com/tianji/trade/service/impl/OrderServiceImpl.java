@@ -4,8 +4,12 @@ import com.baomidou.mybatisplus.core.toolkit.IdWorker;
 import com.baomidou.mybatisplus.extension.plugins.pagination.Page;
 import com.baomidou.mybatisplus.extension.service.impl.ServiceImpl;
 import com.tianji.api.client.course.CourseClient;
+import com.tianji.api.client.promotion.PromotionClient;
 import com.tianji.api.constants.CourseStatus;
 import com.tianji.api.dto.course.CourseSimpleInfoDTO;
+import com.tianji.api.dto.promotion.CouponDiscountDTO;
+import com.tianji.api.dto.promotion.OrderCouponDTO;
+import com.tianji.api.dto.promotion.OrderCourseDTO;
 import com.tianji.api.dto.trade.OrderBasicDTO;
 import com.tianji.common.autoconfigure.mq.RabbitMqHelper;
 import com.tianji.common.constants.MqConstants;
@@ -62,6 +66,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
     private final ICartService cartService;
     private final TradeProperties tradeProperties;
     private final RabbitMqHelper rabbitMqHelper;
+    private final PromotionClient promotionClient;
 
     @Override
     @Transactional
@@ -74,9 +79,21 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         // 2.1.计算订单金额
         Integer totalAmount = courseInfos.stream()
                 .map(CourseSimpleInfoDTO::getPrice).reduce(Integer::sum).orElse(0);
-        // TODO 2.2.计算优惠金额
+        // 2.2.计算优惠金额
         order.setDiscountAmount(0);
-        Integer realAmount = totalAmount - order.getDiscountAmount();
+        List<Long> couponIds = placeOrderDTO.getCouponIds();
+        CouponDiscountDTO discount = null;
+        if (CollUtils.isNotEmpty(couponIds)) {
+            List<OrderCourseDTO> orderCourses = courseInfos.stream()
+                    .map(c -> new OrderCourseDTO().setId(c.getId()).setCateId(c.getThirdCateId()).setPrice(c.getPrice()))
+                    .collect(Collectors.toList());
+            discount = promotionClient.queryDiscountDetailByOrder(new OrderCouponDTO(couponIds, orderCourses));
+            if(discount != null) {
+                order.setDiscountAmount(discount.getDiscountAmount() == null ? 0 : discount.getDiscountAmount());
+                order.setCouponIds(discount.getIds());
+            }
+        }
+        Integer realAmount = Math.max(totalAmount - order.getDiscountAmount(), 0);
         // 2.3.封装其它信息
         order.setUserId(userId);
         order.setTotalAmount(totalAmount);
@@ -89,8 +106,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
 
         // 3.封装订单详情
         List<OrderDetail> orderDetails = new ArrayList<>(courseInfos.size());
+        Map<Long, Integer> discountDetail = discount == null || discount.getDiscountDetail() == null
+                ? Map.of() : discount.getDiscountDetail();
         for (CourseSimpleInfoDTO courseInfo : courseInfos) {
-            orderDetails.add(packageOrderDetail(courseInfo, order));
+            Integer discountValue = discountDetail.getOrDefault(courseInfo.getId(), 0);
+            orderDetails.add(packageOrderDetail(courseInfo, order, discountValue));
         }
 
         // 4.写入数据库
@@ -99,7 +119,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         // 5.删除购物车数据
         cartService.deleteCartByUserAndCourseIds(userId, placeOrderDTO.getCourseIds());
 
-        // 6.构建下单结果
+        // 6.核销优惠券（只核销真正参与抵扣的券）
+        if (CollUtils.isNotEmpty(order.getCouponIds())) {
+            promotionClient.writeOffCoupon(order.getCouponIds());
+        }
+
+        // 7.构建下单结果
         return PlaceOrderResultVO.builder()
                 .orderId(orderId)
                 .payAmount(realAmount)
@@ -158,7 +183,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         order.setId(orderId);
 
         // 3.订单详情
-        OrderDetail detail = packageOrderDetail(courseInfo, order);
+        OrderDetail detail = packageOrderDetail(courseInfo, order, 0);
 
         // 4.写入数据库
         saveOrderAndDetails(order, CollUtils.singletonList(detail));
@@ -192,7 +217,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         List<OrderCourseVO> courses = BeanUtils.copyList(courseInfos, OrderCourseVO.class);
         // 2.计算总价
         int total = courseInfos.stream().mapToInt(CourseSimpleInfoDTO::getPrice).sum();
-        // TODO 3.计算折扣
+        // 3.计算折扣：下单确认页还未选择优惠券，折扣为0，优惠券在支付前由用户选择
         int discountAmount = 0;
         // 4.生成订单id
         long orderId = IdWorker.getId();
@@ -205,7 +230,7 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         return vo;
     }
 
-    private OrderDetail packageOrderDetail(CourseSimpleInfoDTO courseInfo, Order order) {
+    private OrderDetail packageOrderDetail(CourseSimpleInfoDTO courseInfo, Order order, Integer discountAmount) {
         OrderDetail detail = new OrderDetail();
         detail.setUserId(order.getUserId());
         detail.setOrderId(order.getId());
@@ -215,8 +240,8 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         detail.setCoverUrl(courseInfo.getCoverUrl());
         detail.setName(courseInfo.getName());
         detail.setValidDuration(courseInfo.getValidDuration());
-        detail.setDiscountAmount(0);// TODO 计算优惠金额
-        detail.setRealPayAmount(courseInfo.getPrice() - detail.getDiscountAmount());
+        detail.setDiscountAmount(discountAmount);
+        detail.setRealPayAmount(courseInfo.getPrice() - discountAmount);
         return detail;
     }
 
@@ -270,6 +295,11 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         }
         // 5.更新订单条目的状态
         detailService.updateStatusByOrderId(orderId, OrderStatus.CLOSED.getValue());
+
+        // 6.退还优惠券
+        if (CollUtils.isNotEmpty(order.getCouponIds())) {
+            promotionClient.refundCoupon(order.getCouponIds());
+        }
     }
 
     @Override
@@ -350,6 +380,12 @@ public class OrderServiceImpl extends ServiceImpl<OrderMapper, Order> implements
         vo.setDetails(dvs);
         // 3.3.订单进度
         vo.setProgressNodes(detailService.packageProgressNodes(order, null));
+
+        // 3.4.优惠明细
+        if (CollUtils.isNotEmpty(order.getCouponIds())) {
+            List<String> rules = promotionClient.queryDiscountRules(order.getCouponIds());
+            vo.setCouponDesc(String.join("/", rules));
+        }
         return vo;
     }
 
