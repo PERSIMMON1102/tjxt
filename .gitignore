@@ -28,3 +28,5 @@ loadtest/stats.json
 loadtest/*.bundle
 loadtest/replacements.txt
 loadtest/raw/
+loadtest/replacements*.txt
+loadtest/pylib/
