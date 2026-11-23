@@ -16,3 +16,11 @@ target
 logs
 job
 /docs/sql/tj_learning_note.sql
+
+# 压测产物（含 token / 原始结果 / 生成的 Dashboard，不入库）
+loadtest/users.csv
+loadtest/tokens/
+loadtest/*.jtl
+loadtest/*.log
+loadtest/report-*/
+loadtest/stats.json
