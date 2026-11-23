@@ -24,3 +24,7 @@ loadtest/*.jtl
 loadtest/*.log
 loadtest/report-*/
 loadtest/stats.json
+
+loadtest/*.bundle
+loadtest/replacements.txt
+loadtest/raw/
